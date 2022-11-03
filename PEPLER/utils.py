@@ -289,8 +289,7 @@ class Batchify2:
 
 
 def now_time():
-    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f') + ']: '
-
+    return '[' + datetime.datetime.now().strftime('%y-%m-%d %H:%M:%S.%f') + ']: '
 
 def postprocessing(string):
     '''
@@ -313,7 +312,6 @@ def postprocessing(string):
     string = re.sub('\?+', ' ? ', string)
     string = re.sub(' +', ' ', string).strip()
     return string
-
 
 def ids2tokens(ids, tokenizer, eos):
     text = tokenizer.decode(ids)

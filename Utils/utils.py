@@ -1,4 +1,5 @@
 import os
+import re
 import math
 import torch
 import heapq
@@ -164,20 +165,91 @@ class EntityDictionary:
         return len(self.idx2entity)
 
 
+class DataLoader_PEPLER:
+    def __init__(self, data_path, index_dir, tokenizer, seq_len):
+        self.user_dict = EntityDictionary()
+        self.item_dict = EntityDictionary()
+        self.max_rating = float('-inf')
+        self.min_rating = float('inf')
+        self.initialize(data_path)
+        self.feature_set = set()
+        self.tokenizer = tokenizer
+        self.seq_len = seq_len
+        self.train, self.valid, self.test, self.user2feature, self.item2feature = self.load_data(data_path, index_dir)
+
+    def initialize(self, data_path):
+        assert os.path.exists(data_path)
+        reviews = pickle.load(open(data_path, 'rb'))
+        for review in reviews:
+            self.user_dict.add_entity(review['user'])
+            self.item_dict.add_entity(review['item'])
+            rating = review['rating']
+            if self.max_rating < rating:
+                self.max_rating = rating
+            if self.min_rating > rating:
+                self.min_rating = rating
+
+    def load_data(self, data_path, index_dir):
+        data = []
+        reviews = pickle.load(open(data_path, 'rb'))
+        for review in reviews:
+            (fea, adj, tem, sco) = review['template']
+            tokens = self.tokenizer(tem)['input_ids']
+            text = self.tokenizer.decode(tokens[:self.seq_len])  # keep seq_len tokens at most
+            data.append({'user': self.user_dict.entity2idx[review['user']],
+                         'item': self.item_dict.entity2idx[review['item']],
+                         'rating': review['rating'],
+                         'text': text,
+                         'feature': fea})
+            self.feature_set.add(fea)
+
+        train_index, valid_index, test_index = self.load_index(index_dir)
+        train, valid, test = [], [], []
+        user2feature, item2feature = {}, {}
+        for idx in train_index:
+            review = data[idx]
+            train.append(review)
+            u = review['user']
+            i = review['item']
+            f = review['feature']
+            if u in user2feature:
+                user2feature[u].append(f)
+            else:
+                user2feature[u] = [f]
+            if i in item2feature:
+                item2feature[i].append(f)
+            else:
+                item2feature[i] = [f]
+        for idx in valid_index:
+            valid.append(data[idx])
+        for idx in test_index:
+            test.append(data[idx])
+        return train, valid, test, user2feature, item2feature
+
+    def load_index(self, index_dir):
+        assert os.path.exists(index_dir)
+        with open(os.path.join(index_dir, 'train.index'), 'r') as f:
+            train_index = [int(x) for x in f.readline().split(' ')]
+        with open(os.path.join(index_dir, 'validation.index'), 'r') as f:
+            valid_index = [int(x) for x in f.readline().split(' ')]
+        with open(os.path.join(index_dir, 'test.index'), 'r') as f:
+            test_index = [int(x) for x in f.readline().split(' ')]
+        return train_index, valid_index, test_index
+
 class DataLoader:
     def __init__(self, data_path, index_dir, vocab_size,model='PETER'):
+        self.model=model
         self.word_dict = WordDictionary()
         self.user_dict = EntityDictionary()
         self.item_dict = EntityDictionary()
         self.max_rating = float('-inf')
         self.min_rating = float('inf')
         self.initialize(data_path)
+        self.feature_set = set()
         self.word_dict.keep_most_frequent(vocab_size)
         self.__unk = self.word_dict.word2idx['<unk>']
-        self.feature_set = set()
         self.train, self.valid, self.test = self.load_data(data_path, index_dir)
-        self.model=model
-
+        
     def initialize(self, data_path):
         assert os.path.exists(data_path)
         reviews = pickle.load(open(data_path, 'rb'))
@@ -188,7 +260,6 @@ class DataLoader:
             self.word_dict.add_sentence(tem)
             if self.model == 'PETER':
                 self.word_dict.add_word(fea)
-
             rating = review['rating']
             if self.max_rating < rating:
                 self.max_rating = rating
@@ -238,14 +309,6 @@ class DataLoader:
         return train_index, valid_index, test_index
 
 
-def sentence_format(sentence, max_len, pad, bos, eos):
-    length = len(sentence)
-    if length >= max_len:
-        return [bos] + sentence[:max_len] + [eos]
-    else:
-        return [bos] + sentence + [eos] + [pad] * (max_len - length)
-
-
 class Batchify:
     def __init__(self, data, word2idx, seq_len=15, batch_size=128, shuffle=False,model='PETER'):
         bos = word2idx['<bos>']
@@ -267,6 +330,8 @@ class Batchify:
         self.model = model
         if self.model == 'PETER':
             self.feature = torch.tensor(f, dtype=torch.int64).contiguous()
+        else:
+            self.feature = f
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.sample_num = len(data)
@@ -294,9 +359,110 @@ class Batchify:
         return user, item, rating, seq
 
 
+class Batchify_PEPLER:
+    def __init__(self, data, tokenizer, bos, eos, batch_size=128, shuffle=False):
+        u, i, r, t, self.feature = [], [], [], [], []
+        for x in data:
+            u.append(x['user'])
+            i.append(x['item'])
+            r.append(x['rating'])
+            t.append('{} {} {}'.format(bos, x['text'], eos))
+            self.feature.append(x['feature'])
+
+        encoded_inputs = tokenizer(t, padding=True, return_tensors='pt')
+        self.seq = encoded_inputs['input_ids'].contiguous()
+        self.mask = encoded_inputs['attention_mask'].contiguous()
+        self.user = torch.tensor(u, dtype=torch.int64).contiguous()
+        self.item = torch.tensor(i, dtype=torch.int64).contiguous()
+        self.rating = torch.tensor(r, dtype=torch.float).contiguous()
+        self.shuffle = shuffle
+        self.batch_size = batch_size
+        self.sample_num = len(data)
+        self.index_list = list(range(self.sample_num))
+        self.total_step = int(math.ceil(self.sample_num / self.batch_size))
+        self.step = 0
+
+    def next_batch(self):
+        if self.step == self.total_step:
+            self.step = 0
+            if self.shuffle:
+                random.shuffle(self.index_list)
+
+        start = self.step * self.batch_size
+        offset = min(start + self.batch_size, self.sample_num)
+        self.step += 1
+        index = self.index_list[start:offset]
+        user = self.user[index]  # (batch_size,)
+        item = self.item[index]
+        rating = self.rating[index]
+        seq = self.seq[index]  # (batch_size, seq_len)
+        mask = self.mask[index]
+        return user, item, rating, seq, mask
+
+class Batchify2_PEPLER:
+    def __init__(self, data, user2feature, item2feature, tokenizer, bos, eos, seq_len, batch_size=128, shuffle=False):
+        t, self.feature, features = [], [], []
+        for x in data:
+            ufea = set(user2feature[x['user']])
+            ifea = set(item2feature[x['item']])
+            intersection = ufea & ifea
+            difference = ufea | ifea - intersection
+            features.append(' '.join(list(intersection) + list(difference)))
+            t.append('{} {} {}'.format(bos, x['text'], eos))
+            self.feature.append(x['feature'])
+
+        encoded_inputs = tokenizer(t, padding=True, return_tensors='pt')
+        self.seq = encoded_inputs['input_ids'].contiguous()
+        self.mask = encoded_inputs['attention_mask'].contiguous()
+        encoded_features = tokenizer(features, padding=True, return_tensors='pt')
+        self.prompt = encoded_features['input_ids'][:, :seq_len].contiguous()
+        self.shuffle = shuffle
+        self.batch_size = batch_size
+        self.sample_num = len(data)
+        self.index_list = list(range(self.sample_num))
+        self.total_step = int(math.ceil(self.sample_num / self.batch_size))
+        self.step = 0
+
+    def next_batch(self):
+        if self.step == self.total_step:
+            self.step = 0
+            if self.shuffle:
+                random.shuffle(self.index_list)
+
+        start = self.step * self.batch_size
+        offset = min(start + self.batch_size, self.sample_num)
+        self.step += 1
+        index = self.index_list[start:offset]
+        seq = self.seq[index]  # (batch_size, seq_len)
+        mask = self.mask[index]
+        prompt = self.prompt[index]
+        return seq, mask, prompt
+
+
 def now_time():
     return '[' + datetime.datetime.now().strftime('%y-%m-%d %H:%M:%S.%f') + ']: '
 
+def postprocessing(string):
+    '''
+    adopted from https://github.com/yoonkim/CNN_sentence/blob/master/process_data.py
+    '''
+    string = re.sub('\'s', ' \'s', string)
+    string = re.sub('\'m', ' \'m', string)
+    string = re.sub('\'ve', ' \'ve', string)
+    string = re.sub('n\'t', ' n\'t', string)
+    string = re.sub('\'re', ' \'re', string)
+    string = re.sub('\'d', ' \'d', string)
+    string = re.sub('\'ll', ' \'ll', string)
+    string = re.sub('\(', ' ( ', string)
+    string = re.sub('\)', ' ) ', string)
+    string = re.sub(',+', ' , ', string)
+    string = re.sub(':+', ' , ', string)
+    string = re.sub(';+', ' . ', string)
+    string = re.sub('\.+', ' . ', string)
+    string = re.sub('!+', ' ! ', string)
+    string = re.sub('\?+', ' ? ', string)
+    string = re.sub(' +', ' ', string).strip()
+    return string
 
 def ids2tokens(ids, word2idx, idx2word):
     eos = word2idx['<eos>']
@@ -306,3 +472,20 @@ def ids2tokens(ids, word2idx, idx2word):
             break
         tokens.append(idx2word[i])
     return tokens
+
+def ids2tokens_PEPLER(ids, tokenizer, eos):
+    text = tokenizer.decode(ids)
+    text = postprocessing(text)  # process punctuations: "good!" -> "good !"
+    tokens = []
+    for token in text.split():
+        if token == eos:
+            break
+        tokens.append(token)
+    return tokens
+
+def sentence_format(sentence, max_len, pad, bos, eos):
+    length = len(sentence)
+    if length >= max_len:
+        return [bos] + sentence[:max_len] + [eos]
+    else:
+        return [bos] + sentence + [eos] + [pad] * (max_len - length)

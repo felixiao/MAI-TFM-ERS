@@ -1,16 +1,107 @@
-from bleu import compute_bleu
-from rouge import rouge
+import os
+import math
 import numpy as np
-import datetime
 import random
 import pickle
-import math
-import os
+import datetime
+from rouge import rouge
+from bleu import compute_bleu
 
 
-def get_now_time():
-    """a string of current time"""
-    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f') + ']: '
+
+def rouge_score(references, generated):
+    """both are a list of strings"""
+    score = rouge(generated, references)
+    rouge_s = {k: (v * 100) for (k, v) in score.items()}
+    '''
+    "rouge_1/f_score": rouge_1_f,
+    "rouge_1/r_score": rouge_1_r,
+    "rouge_1/p_score": rouge_1_p,
+    "rouge_2/f_score": rouge_2_f,
+    "rouge_2/r_score": rouge_2_r,
+    "rouge_2/p_score": rouge_2_p,
+    "rouge_l/f_score": rouge_l_f,
+    "rouge_l/r_score": rouge_l_r,
+    "rouge_l/p_score": rouge_l_p,
+    '''
+    return rouge_s
+
+
+def bleu_score(references, generated, n_gram=4, smooth=False):
+    """a list of lists of tokens"""
+    formatted_ref = [[ref] for ref in references]
+    bleu_s, _, _, _, _, _ = compute_bleu(formatted_ref, generated, n_gram, smooth)
+    return bleu_s * 100
+
+
+def two_seq_same(sa, sb):
+    if len(sa) != len(sb):
+        return False
+    for (wa, wb) in zip(sa, sb):
+        if wa != wb:
+            return False
+    return True
+
+
+def unique_sentence_percent(sequence_batch):
+    unique_seq = []
+    for seq in sequence_batch:
+        count = 0
+        for uni_seq in unique_seq:
+            if two_seq_same(seq, uni_seq):
+                count += 1
+                break
+        if count == 0:
+            unique_seq.append(seq)
+
+    return len(unique_seq) / len(sequence_batch), len(unique_seq)
+
+
+def feature_detect(seq_batch, feature_set):
+    feature_batch = []
+    for ids in seq_batch:
+        feature_list = []
+        for i in ids:
+            if i in feature_set:
+                feature_list.append(i)
+        feature_batch.append(feature_list)
+
+    return feature_batch
+
+
+def feature_matching_ratio(feature_batch, test_feature):
+    count = 0
+    for (fea_list, fea) in zip(feature_batch, test_feature):
+        for f in fea_list:
+            if f == fea:
+                count += 1
+                break
+
+    return count / len(feature_batch)
+
+
+def feature_coverage_ratio(feature_batch, feature_set):
+    feature_list = []
+    for fb in feature_batch:
+        feature_list.extend(fb)
+
+    return len(set(feature_list)) / len(feature_set)
+
+
+def feature_diversity(feature_batch):
+    list_len = len(feature_batch)
+
+    total_count = 0
+    for i, x in enumerate(feature_batch):
+        for j in range(i + 1, list_len):
+            y = feature_batch[j]
+            for k in y:
+                if k in x:
+                    total_count += 1
+
+    denominator = list_len * (list_len - 1) / 2
+
+    return total_count / denominator
 
 
 def mean_absolute_error(predicted, max_r, min_r):
@@ -23,9 +114,7 @@ def mean_absolute_error(predicted, max_r, min_r):
 
         sub = p - r
         total += abs(sub)
-
     return total / len(predicted)
-
 
 def mean_square_error(predicted, max_r, min_r):
     total = 0
@@ -44,6 +133,64 @@ def mean_square_error(predicted, max_r, min_r):
 def root_mean_square_error(predicted, max_r, min_r):
     mse = mean_square_error(predicted, max_r, min_r)
     return math.sqrt(mse)
+
+
+
+def pad_sequence_4_generation(sequence_batch, pad_int):
+    '''
+    Pad sentences with <PAD> so that each sentence of a batch has the same length
+    :param sequence_batch: a list of lists
+    :return: 2d numpy matrix, 1d numpy vector
+    '''
+    seq_len = [len(sequence) for sequence in sequence_batch]
+    max_seq_len = max(seq_len)
+    new_batch = [sequence + [pad_int] * (max_seq_len - len(sequence)) for sequence in sequence_batch]
+    new_batch = np.asarray(new_batch, dtype=np.int32)
+    new_seq_len = np.asarray(seq_len, dtype=np.int32)
+
+    return new_batch, new_seq_len
+
+
+def evaluate_ndcg(user2items_test, user2items_top):
+    top_k = len(list(user2items_top.values())[0])
+    dcgs = [1 / math.log(i + 2) for i in range(top_k)]
+
+    ndcg = 0
+    for u, test_items in user2items_test.items():
+        rank_list = user2items_top[u]
+        dcg_u = 0
+        for idx, item in enumerate(rank_list):
+            if item in test_items:
+                dcg_u += dcgs[idx]
+        ndcg += dcg_u
+
+    return ndcg / (sum(dcgs) * len(user2items_test))
+
+
+def evaluate_precision_recall_f1(user2items_test, user2items_top):
+    top_k = len(list(user2items_top.values())[0])
+
+    precision_sum = 0
+    recall_sum = 0  # it is also named hit ratio
+    f1_sum = 0
+    for u, test_items in user2items_test.items():
+        rank_list = user2items_top[u]
+        hits = len(test_items & set(rank_list))
+        pre = hits / top_k
+        rec = hits / len(test_items)
+        precision_sum += pre
+        recall_sum += rec
+        if (pre + rec) > 0:
+            f1_sum += 2 * pre * rec / (pre + rec)
+
+    precision = precision_sum / len(user2items_test)
+    recall = recall_sum / len(user2items_test)
+    f1 = f1_sum / len(user2items_test)
+
+    return precision, recall, f1
+
+
+
 
 
 def split_data(data_path, save_dir, ratio_str):
@@ -113,30 +260,6 @@ def split_data(data_path, save_dir, ratio_str):
     write_to_file(save_dir + 'validation.index', validation_set)
     write_to_file(save_dir + 'test.index', test_set)
 
-
-def two_seq_same(sa, sb):
-    if len(sa) != len(sb):
-        return False
-    for (wa, wb) in zip(sa, sb):
-        if wa != wb:
-            return False
-    return True
-
-
-def unique_sentence_percent(sequence_batch):
-    unique_seq = []
-    for seq in sequence_batch:
-        count = 0
-        for uni_seq in unique_seq:
-            if two_seq_same(seq, uni_seq):
-                count += 1
-                break
-        if count == 0:
-            unique_seq.append(seq)
-
-    return len(unique_seq) / len(sequence_batch), len(unique_seq)
-
-
 def chop_before_eos(word2index, ids):
     end = len(ids)
     for idx, i in enumerate(ids):
@@ -145,53 +268,9 @@ def chop_before_eos(word2index, ids):
             break
     return ids[:end]
 
-
-def feature_detect(seq_batch, feature_set):
-    feature_batch = []
-    for ids in seq_batch:
-        feature_list = []
-        for i in ids:
-            if i in feature_set:
-                feature_list.append(i)
-        feature_batch.append(feature_list)
-
-    return feature_batch
-
-
-def feature_matching_ratio(feature_batch, test_feature):
-    count = 0
-    for (fea_list, fea) in zip(feature_batch, test_feature):
-        for f in fea_list:
-            if f == fea:
-                count += 1
-                break
-
-    return count / len(feature_batch)
-
-
-def feature_coverage_ratio(feature_batch, feature_set):
-    feature_list = []
-    for fb in feature_batch:
-        feature_list.extend(fb)
-
-    return len(set(feature_list)) / len(feature_set)
-
-
-def feature_diversity(feature_batch):
-    list_len = len(feature_batch)
-
-    total_count = 0
-    for i, x in enumerate(feature_batch):
-        for j in range(i + 1, list_len):
-            y = feature_batch[j]
-            for k in y:
-                if k in x:
-                    total_count += 1
-
-    denominator = list_len * (list_len - 1) / 2
-
-    return total_count / denominator
-
+def get_now_time():
+    """a string of current time"""
+    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f') + ']: '
 
 def ids2tokens(word_list, ids):
     result = []
@@ -201,29 +280,10 @@ def ids2tokens(word_list, ids):
     return result
 
 
-def bleu_score(references, generated, n_gram=4, smooth=False):
-    """a list of lists of tokens"""
-    formatted_ref = [[ref] for ref in references]
-    bleu_s, _, _, _, _, _ = compute_bleu(formatted_ref, generated, n_gram, smooth)
-    return bleu_s * 100
 
 
-def rouge_score(references, generated):
-    """both are a list of strings"""
-    score = rouge(generated, references)
-    rouge_s = {k: (v * 100) for (k, v) in score.items()}
-    '''
-    "rouge_1/f_score": rouge_1_f,
-    "rouge_1/r_score": rouge_1_r,
-    "rouge_1/p_score": rouge_1_p,
-    "rouge_2/f_score": rouge_2_f,
-    "rouge_2/r_score": rouge_2_r,
-    "rouge_2/p_score": rouge_2_p,
-    "rouge_l/f_score": rouge_l_f,
-    "rouge_l/r_score": rouge_l_r,
-    "rouge_l/p_score": rouge_l_p,
-    '''
-    return rouge_s
+
+
 
 
 def ids2sentence(word2index, word_list, ids):
@@ -234,57 +294,3 @@ def ids2sentence(word2index, word_list, ids):
         else:
             break
     return ' '.join(result)
-
-
-def pad_sequence_4_generation(sequence_batch, pad_int):
-    '''
-    Pad sentences with <PAD> so that each sentence of a batch has the same length
-    :param sequence_batch: a list of lists
-    :return: 2d numpy matrix, 1d numpy vector
-    '''
-    seq_len = [len(sequence) for sequence in sequence_batch]
-    max_seq_len = max(seq_len)
-    new_batch = [sequence + [pad_int] * (max_seq_len - len(sequence)) for sequence in sequence_batch]
-    new_batch = np.asarray(new_batch, dtype=np.int32)
-    new_seq_len = np.asarray(seq_len, dtype=np.int32)
-
-    return new_batch, new_seq_len
-
-
-def evaluate_ndcg(user2items_test, user2items_top):
-    top_k = len(list(user2items_top.values())[0])
-    dcgs = [1 / math.log(i + 2) for i in range(top_k)]
-
-    ndcg = 0
-    for u, test_items in user2items_test.items():
-        rank_list = user2items_top[u]
-        dcg_u = 0
-        for idx, item in enumerate(rank_list):
-            if item in test_items:
-                dcg_u += dcgs[idx]
-        ndcg += dcg_u
-
-    return ndcg / (sum(dcgs) * len(user2items_test))
-
-
-def evaluate_precision_recall_f1(user2items_test, user2items_top):
-    top_k = len(list(user2items_top.values())[0])
-
-    precision_sum = 0
-    recall_sum = 0  # it is also named hit ratio
-    f1_sum = 0
-    for u, test_items in user2items_test.items():
-        rank_list = user2items_top[u]
-        hits = len(test_items & set(rank_list))
-        pre = hits / top_k
-        rec = hits / len(test_items)
-        precision_sum += pre
-        recall_sum += rec
-        if (pre + rec) > 0:
-            f1_sum += 2 * pre * rec / (pre + rec)
-
-    precision = precision_sum / len(user2items_test)
-    recall = recall_sum / len(user2items_test)
-    f1 = f1_sum / len(user2items_test)
-
-    return precision, recall, f1
