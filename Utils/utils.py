@@ -5,8 +5,8 @@ import heapq
 import random
 import pickle
 import datetime
-from rouge import rouge
-from bleu import compute_bleu
+from Utils.rouge import rouge
+from Utils.bleu import compute_bleu
 
 
 def rouge_score(references, generated):
