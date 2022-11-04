@@ -4,7 +4,7 @@ import torch
 import argparse
 import torch.nn as nn
 from module import Att2Seq
-from Utils.utils import rouge_score, bleu_score, DataLoader, Batchify, now_time, ids2tokens, unique_sentence_percent, \
+from utils import rouge_score, bleu_score, DataLoader, Batchify, now_time, ids2tokens, unique_sentence_percent, \
     feature_detect, feature_matching_ratio, feature_coverage_ratio, feature_diversity
 
 

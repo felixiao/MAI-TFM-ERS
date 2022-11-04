@@ -1,6 +1,6 @@
 from module import NETE_r, NETE_t
 from load_data import load_data
-from Utils.utils import *
+from utils import *
 import argparse
 import sys
 

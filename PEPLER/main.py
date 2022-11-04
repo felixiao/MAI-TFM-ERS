@@ -4,7 +4,7 @@ import torch
 import argparse
 from transformers import GPT2Tokenizer, AdamW
 from module import ContinuousPromptLearning
-from Utils.utils import rouge_score, bleu_score, DataLoader, Batchify, now_time, ids2tokens, unique_sentence_percent, \
+from utils import rouge_score, bleu_score, DataLoader, Batchify, now_time, ids2tokens, unique_sentence_percent, \
     feature_detect, feature_matching_ratio, feature_coverage_ratio, feature_diversity
 
 
