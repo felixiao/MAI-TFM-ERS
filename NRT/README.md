@@ -20,7 +20,7 @@ python -u main.py \
 --data_path ../TripAdvisor/reviews.pickle \
 --index_dir ../TripAdvisor/1/ \
 --cuda \
---checkpoint ./tripadvisor/ >> tripadvisor.log
+--checkpoint ./tripadvisor/ >> tripadvisor.loge
 ```
 
 ## Code dependencies

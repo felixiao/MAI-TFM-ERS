@@ -221,7 +221,6 @@ for epoch in range(1, args.epochs + 1):
 with open(model_path, 'rb') as f:
     model = torch.load(f).to(device)
 
-
 # Run on test data.
 test_loss = evaluate(test_data)
 print('=' * 89)
