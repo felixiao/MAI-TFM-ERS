@@ -45,58 +45,58 @@ class ProcessResult():
                         result['test']['total loss'] = float(l.split('|')[2].split(' ')[3])
                         # print('text ppl=',result['test']['text ppl'],'total loss=',result['test']['total loss'],'rating loss=',result['test']['rating loss'])
                 if 'RMSE' in l:
-                    result['test']['RMSE'] = float(l.split('RMSE ')[-1][:-1])
+                    result['test']['RMSE↓'] = float(l.split('RMSE ')[-1][:-1])
                     # print('RMSE=',result['test']['RMSE'])
                 if 'MAE' in l:
-                    result['test']['MAE'] = float(l.split('MAE ')[-1][:-1])
+                    result['test']['MAE↓'] = float(l.split('MAE ')[-1][:-1])
                     # print('MAE=',result['test']['MAE'])
                 if 'BLEU-1' in l:
-                    result['test']['BLEU-1'] = float(l.split('BLEU-1 ')[-1][:-1])
-                    # print('BLEU-1=',result['test']['BLEU-1'])
+                    result['test']['B1↑'] = float(l.split('BLEU-1 ')[-1][:-1])
+                    # print('BLEU-1=',result['test']['B1'])
                 if 'BLEU-4' in l:
-                    result['test']['BLEU-4'] = float(l.split('BLEU-4 ')[-1][:-1])
-                    # print('BLEU-4=',result['test']['BLEU-4'])
+                    result['test']['B4↑'] = float(l.split('BLEU-4 ')[-1][:-1])
+                    # print('BLEU-4=',result['test']['B4'])
                 if 'USR' in l:
-                    result['test']['USR'] = float(l.split('|')[0].split('USR')[-1][:-1])
-                    result['test']['USN'] = float(l.split('|')[1].split('USN')[-1][:-1])
+                    result['test']['USR↑'] = float(l.split('|')[0].split('USR')[-1][:-1])
+                    result['test']['USN↑'] = float(l.split('|')[1].split('USN')[-1][:-1])
                     # print('USR=',result['test']['USR'],'USN=',result['test']['USN'])
                 if 'DIV' in l:
-                    result['test']['DIV'] = float(l.split('DIV ')[-1][:-1])
+                    result['test']['DIV↓'] = float(l.split('DIV ')[-1][:-1])
                     # print('DIV=',result['test']['DIV'])
                 if 'FCR' in l:
-                    result['test']['FCR'] = float(l.split('FCR ')[-1][:-1])
+                    result['test']['FCR↑'] = float(l.split('FCR ')[-1][:-1])
                     # print('FCR=',result['test']['FCR'])
                 if 'FMR' in l:
-                    result['test']['FMR'] = float(l.split('FMR ')[-1][:-1])
+                    result['test']['FMR↑'] = float(l.split('FMR ')[-1][:-1])
                     # print('FMR=',result['test']['FMR'])
                 if 'rouge_1/f_score' in l:
-                    result['test']['R1-F'] = float(l.split('rouge_1/f_score ')[-1][:-1])
+                    result['test']['R1-F↑'] = float(l.split('rouge_1/f_score ')[-1][:-1])
                     # print('rouge_1/f_score=',result['test']['R1-F'])
                 if 'rouge_1/r_score' in l:
-                    result['test']['R1-R'] = float(l.split('rouge_1/r_score ')[-1][:-1])
+                    result['test']['R1-R↑'] = float(l.split('rouge_1/r_score ')[-1][:-1])
                     # print('rouge_1/r_score=',result['test']['R1-R'])
                 if 'rouge_1/p_score' in l:
-                    result['test']['R1-P'] = float(l.split('rouge_1/p_score ')[-1][:-1])
+                    result['test']['R1-P↑'] = float(l.split('rouge_1/p_score ')[-1][:-1])
                     # print('rouge_1/p_score=',result['test']['R1-P'])
 
                 if 'rouge_2/f_score' in l:
-                    result['test']['R2-F'] = float(l.split('rouge_2/f_score ')[-1][:-1])
+                    result['test']['R2-F↑'] = float(l.split('rouge_2/f_score ')[-1][:-1])
                     # print('rouge_2/f_score=',result['test']['R2-F'])
                 if 'rouge_2/r_score' in l:
-                    result['test']['R2-R'] = float(l.split('rouge_2/r_score ')[-1][:-1])
+                    result['test']['R2-R↑'] = float(l.split('rouge_2/r_score ')[-1][:-1])
                     # print('rouge_2/r_score=',result['test']['R2-R'])
                 if 'rouge_2/p_score' in l:
-                    result['test']['R2-P'] = float(l.split('rouge_2/p_score ')[-1][:-1])
+                    result['test']['R2-P↑'] = float(l.split('rouge_2/p_score ')[-1][:-1])
                     # print('rouge_2/p_score=',result['test']['R2-P'])
 
                 if 'rouge_l/f_score' in l:
-                    result['test']['RL-F'] = float(l.split('rouge_l/f_score ')[-1][:-1])
+                    result['test']['RL-F↑'] = float(l.split('rouge_l/f_score ')[-1][:-1])
                     # print('rouge_l/f_score=',result['test']['RL-F'])
                 if 'rouge_l/r_score' in l:
-                    result['test']['RL-R'] = float(l.split('rouge_l/r_score ')[-1][:-1])
+                    result['test']['RL-R↑'] = float(l.split('rouge_l/r_score ')[-1][:-1])
                     # print('rouge_l/r_score=',result['test']['RL-R'])
                 if 'rouge_l/p_score' in l:
-                    result['test']['RL-P'] = float(l.split('rouge_l/p_score ')[-1][:-1])
+                    result['test']['RL-P↑'] = float(l.split('rouge_l/p_score ')[-1][:-1])
                     # print('rouge_l/p_score=',result['test']['RL-P'])
                 
             f.close()
@@ -117,7 +117,7 @@ class ProcessResult():
         return dt,dtmean
 
 
-def CompareResults(path_csv, parent_path,models):
+def CompareResults(path_csv, parent_path,models,paper=True):
     CmpRes = []
     for i,p in enumerate(models):
         pr = ProcessResult(os.path.join(parent_path,p)+'/',p)
@@ -126,10 +126,15 @@ def CompareResults(path_csv, parent_path,models):
         CmpRes.append(pr_mean)
     print('\n'+'='*20+' ' + parent_path.split(os.sep)[-1] +' '+'='*20)
     table = pd.DataFrame(data=CmpRes,index=models)
-    print(table[['FMR','FCR','DIV','USR','BLEU-1','BLEU-4','R1-P','R1-R','R1-F','R2-P','R2-R','R2-F']])
-    
+    if paper:
+        paper_df = pd.read_csv(os.path.join(parent_path,'Paper_'+path_csv),index_col=0)
+        # print(paper_df)
+        table = pd.concat([table,paper_df.loc[['NRT_P','PETER+_P']]])
+        print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']].loc[['NRT','NRT_P','PETER','PETER+_P']])
+    else:
+        print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']])
     table.to_csv(os.path.join(parent_path,path_csv))
 
 CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','PETER'])
-CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','PETER'])
+CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','PETER'],False)
 CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','PETER'])
