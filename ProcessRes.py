@@ -128,7 +128,7 @@ def CompareResults(path_csv, parent_path,models):
     table = pd.DataFrame(data=CmpRes,index=models)
     print(table[['FMR','FCR','DIV','USR','BLEU-1','BLEU-4','R1-P','R1-R','R1-F','R2-P','R2-R','R2-F']])
     
-    table.to_csv(path_csv)
+    table.to_csv(os.path.join(parent_path,path_csv))
 
 CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','PETER'])
 CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','PETER'])
