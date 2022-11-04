@@ -117,14 +117,19 @@ class ProcessResult():
         return dt,dtmean
 
 
-TA_PETER_F = ProcessResult('./Result/TripAdvisor/PETER/')
-_,TA_PETER_F_mean = TA_PETER_F.LoadAll()
-# print(dt)
-# print(dtmean)
-TA_NRT = ProcessResult('./Result/TripAdvisor/NRT/','NRT')
-_,TA_NRT_mean = TA_NRT.LoadAll()
+def CompareResults(path_csv, parent_path,models):
+    CmpRes = []
+    for i,p in enumerate(models):
+        pr = ProcessResult(os.path.join(parent_path,p)+'/',p)
+        _,pr_mean = pr.LoadAll()
+        # print(pr_mean)
+        CmpRes.append(pr_mean)
+    print('\n'+'='*20+' ' + parent_path.split(os.sep)[-1] +' '+'='*20)
+    table = pd.DataFrame(data=CmpRes,index=models)
+    print(table[['FMR','FCR','DIV','USR','BLEU-1','BLEU-4','R1-P','R1-R','R1-F','R2-P','R2-R','R2-F']])
+    
+    table.to_csv(path_csv)
 
-TA_Table = pd.DataFrame(data=[TA_NRT_mean,TA_PETER_F_mean],index=['NRT','PETER+'])
-print(TA_Table[['FMR','FCR','DIV','USR','BLEU-1','BLEU-4','R1-P','R1-R','R1-F','R2-P','R2-R','R2-F']])
-
-TA_Table.to_csv('TA_RESULT_TABLE.csv')
+CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','PETER'])
+CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','PETER'])
+CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','PETER'])
