@@ -3,7 +3,7 @@ import os
 import glob
 
 class ProcessResult():
-    def __init__(self,path,model='PETER'):
+    def __init__(self,path,model='PETER+'):
         """_summary_
 
         Args:
@@ -14,11 +14,11 @@ class ProcessResult():
         self.model = model
     
     def LoadOne(self,filename):
-        result = {'sub':int(filename[-5:-4]),'train':{'loss':[],'val_loss':[]},'test':{}}
+        result = {'sub':int(filename[-5:-4]),'train':{'loss':[],'val_loss':[],'textppl':[],'val_textppl':[],'rating_loss':[],'val_rating_loss':[]},'test':{}}
         with open(filename,'r') as f:
             lns = f.readlines()
             for l in lns:
-                if self.model == 'PETER':
+                if self.model in ['PETER','PETER+']:
                     if 'valid' in l:
                         loss = l.split('|')[2][13:-1]
                         val_loss = l.split('|')[-1][12:-15]
@@ -35,14 +35,37 @@ class ProcessResult():
                         loss = l.split('|')[-1].split(' ')[3]
                         # print('loss=',float(loss))
                         result['train']['loss'].append(float(loss))
+                        txtppl = l.split('|')[0].split(' ')[-2]
+                        # print('txtppl=',txtppl)
+                        result['train']['textppl'].append(float(txtppl))
+                        rating_loss = l.split('|')[1].split(' ')[-2]
+                        # print('rating loss=',rating_loss)
+                        result['train']['rating_loss'].append(float(rating_loss))
                     if 'on validation' in l:
                         val_loss = l.split('|')[-1].split(' ')[3]
                         # print('val_loss=',float(val_loss))
                         result['train']['val_loss'].append(float(val_loss))
+                        txtppl = l.split('|')[0].split(' ')[-2]
+                        # print('val_txtppl=',txtppl)
+                        result['train']['val_textppl'].append(float(txtppl))
+                        rating_loss = l.split('|')[1].split(' ')[-2]
+                        # print('val_rating loss=',rating_loss)
+                        result['train']['val_rating_loss'].append(float(rating_loss))
                     if 'test' in l:
                         result['test']['text ppl'] = float(l.split('|')[0].split(' ')[-2])
                         result['test']['rating loss'] = float(l.split('|')[1].split(' ')[-2])
                         result['test']['total loss'] = float(l.split('|')[2].split(' ')[3])
+                elif self.model == 'Att2Seq':
+                    if 'on train' in l:
+                        loss = l.split(' ')[-3]
+                        # print('loss=',float(loss))
+                        result['train']['textppl'].append(float(loss))
+                    if 'on validation' in l:
+                        val_loss = l.split(' ')[-3]
+                        # print('val_loss=',float(val_loss))
+                        result['train']['val_textppl'].append(float(val_loss))
+                    if 'End of' in l:
+                        result['test']['text ppl'] = float(l.split('|')[0].split(' ')[-2])
                         # print('text ppl=',result['test']['text ppl'],'total loss=',result['test']['total loss'],'rating loss=',result['test']['rating loss'])
                 if 'RMSE' in l:
                     result['test']['RMSE↓'] = float(l.split('RMSE ')[-1][:-1])
@@ -129,12 +152,18 @@ def CompareResults(path_csv, parent_path,models,paper=True):
     if paper:
         paper_df = pd.read_csv(os.path.join(parent_path,'Paper_'+path_csv),index_col=0)
         # print(paper_df)
-        table = pd.concat([table,paper_df.loc[['NRT_P','PETER+_P']]])
-        print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']].loc[['NRT','NRT_P','PETER','PETER+_P']])
+        mp = [m+'_P' for m in models]
+        mo = []
+        for i in range(len(models)) :
+            mo.append(models[i])
+            mo.append(mp[i])
+        table = pd.concat([table,paper_df.loc[mp]])
+        print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']].loc[mo])
+    
     else:
         print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']])
     table.to_csv(os.path.join(parent_path,path_csv))
 
-CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','PETER'])
-CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','PETER'],False)
-CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','PETER'])
+CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','Att2Seq','PETER+'])
+CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','Att2Seq','PETER+'],False)
+CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','PETER+'])
