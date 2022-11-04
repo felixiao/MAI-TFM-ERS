@@ -289,7 +289,7 @@ class Batchify2:
 
 
 def now_time():
-    return '[' + datetime.datetime.now().strftime('%y-%m-%d %H:%M:%S.%f') + ']: '
+    return '[' + datetime.datetime.now().strftime('%y-%m-%d %H:%M:%S.%f')[:-4] + ']: '
 
 def postprocessing(string):
     '''
