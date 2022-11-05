@@ -147,7 +147,8 @@ def CompareResults(path_csv, parent_path,models,paper=True):
         _,pr_mean = pr.LoadAll()
         # print(pr_mean)
         CmpRes.append(pr_mean)
-    print('\n'+'='*20+' ' + parent_path.split(os.sep)[-1] +' '+'='*20)
+    name_len = len(parent_path.split(os.sep)[-1])
+    print('\n'+'='*20+' '*(12-name_len//2) + parent_path.split(os.sep)[-1] +' '*(12-name_len//2)+'='*20)
     table = pd.DataFrame(data=CmpRes,index=models)
     if paper:
         paper_df = pd.read_csv(os.path.join(parent_path,'Paper_'+path_csv),index_col=0)
@@ -158,12 +159,11 @@ def CompareResults(path_csv, parent_path,models,paper=True):
             mo.append(models[i])
             mo.append(mp[i])
         table = pd.concat([table,paper_df.loc[mp]])
-        print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']].loc[mo])
-    
+        print(table[['RMSE↓','MAE↓','FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']].loc[mo])
     else:
-        print(table[['FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']])
+        print(table[['RMSE↓','MAE↓','FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']])
     table.to_csv(os.path.join(parent_path,path_csv))
 
 CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','Att2Seq','PETER+'])
 CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','Att2Seq','PETER+'],False)
-CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','PETER+'])
+CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','Att2Seq','PETER+'])
