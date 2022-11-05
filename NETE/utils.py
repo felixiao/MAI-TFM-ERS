@@ -270,7 +270,7 @@ def chop_before_eos(word2index, ids):
 
 def get_now_time():
     """a string of current time"""
-    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-4] + ']: '
+    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f') + ']: '
 
 def ids2tokens(word_list, ids):
     result = []

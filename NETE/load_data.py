@@ -1,5 +1,5 @@
 from sklearn.feature_extraction.text import CountVectorizer
-from Utils.utils import *
+from utils import *
 
 
 def load_data(data_path, index_dir, max_word_num, seq_max_len, use_predicted_feature=False):

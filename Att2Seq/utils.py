@@ -255,7 +255,7 @@ class Batchify:
 
 
 def now_time():
-    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-4] + ']: '
+    return '[' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f') + ']: '
 
 
 def ids2tokens(ids, word2idx, idx2word):

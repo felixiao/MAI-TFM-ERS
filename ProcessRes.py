@@ -164,6 +164,7 @@ def CompareResults(path_csv, parent_path,models,paper=True):
         print(table[['RMSE↓','MAE↓','FMR↑','FCR↑','DIV↓','USR↑','B1↑','B4↑','R1-P↑','R1-R↑','R1-F↑','R2-P↑','R2-R↑','R2-F↑']])
     table.to_csv(os.path.join(parent_path,path_csv))
 
-CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','Att2Seq','PETER+'])
-CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','Att2Seq','PETER+'],False)
+CompareResults('TA_RESULT_TABLE.csv','./Result/TripAdvisor',['NRT','Att2Seq','PETER','PETER+'])
+CompareResults('CSJ_RESULT_TABLE.csv','./Result/Amazon/ClothingShoesAndJewelry',['NRT','Att2Seq','PETER','PETER+'],False)
 CompareResults('MT_RESULT_TABLE.csv','./Result/Amazon/MoviesAndTV',['NRT','Att2Seq','PETER+'])
+CompareResults('Yelp_RESULT_TABLE.csv','./Result/Yelp',['PETER+'])

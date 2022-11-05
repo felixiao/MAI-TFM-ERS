@@ -57,6 +57,9 @@ parser.add_argument('--use_feature', action='store_true',
                     help='False: no feature; True: use the feature')
 parser.add_argument('--words', type=int, default=15,
                     help='number of words to generate for each sample')
+parser.add_argument('--mode', type=str, default='Train+Test',
+                    help='the mode of the NRT, Train for only training, Test for only test, Train+Test for both train and test')
+
 args = parser.parse_args()
 
 if args.data_path is None:
@@ -78,7 +81,7 @@ device = torch.device('cuda' if args.cuda else 'cpu')
 
 if not os.path.exists(args.checkpoint):
     os.makedirs(args.checkpoint)
-model_path = os.path.join(args.checkpoint, 'model.pt')
+model_path = os.path.join(args.checkpoint, 'model.pt' if args.use_feature else 'model_feat.pt')
 prediction_path = os.path.join(args.checkpoint, args.outf)
 
 ###############################################################################
@@ -286,47 +289,48 @@ def generate(data):
         text_out += '{}\n{}\n{}\n\n'.format(real, ctx, fake)
     return text_out
 
+if args.mode == 'Train+Test' or args.mode == 'Train':
+    # Loop over epochs.
+    best_val_loss = float('inf')
+    endure_count = 0
+    for epoch in range(1, args.epochs + 1):
+        print(now_time() + 'epoch {}'.format(epoch))
+        train(train_data)
+        val_c_loss, val_t_loss, val_r_loss = evaluate(val_data)
+        if args.rating_reg == 0:
+            val_loss = val_t_loss
+        else:
+            val_loss = val_t_loss + val_r_loss
+        print(now_time() + 'context ppl {:4.4f} | text ppl {:4.4f} | rating loss {:4.4f} | valid loss {:4.4f} on validation'.format(
+            math.exp(val_c_loss), math.exp(val_t_loss), val_r_loss, val_loss))
+        # Save the model if the validation loss is the best we've seen so far.
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            with open(model_path, 'wb') as f:
+                torch.save(model, f)
+        else:
+            endure_count += 1
+            print(now_time() + 'Endured {} time(s)'.format(endure_count))
+            if endure_count == args.endure_times:
+                print(now_time() + 'Cannot endure it anymore | Exiting from early stop')
+                break
+            # Anneal the learning rate if no improvement has been seen in the validation dataset.
+            scheduler.step()
+            print(now_time() + 'Learning rate set to {:2.8f}'.format(scheduler.get_last_lr()[0]))
 
-# Loop over epochs.
-best_val_loss = float('inf')
-endure_count = 0
-for epoch in range(1, args.epochs + 1):
-    print(now_time() + 'epoch {}'.format(epoch))
-    train(train_data)
-    val_c_loss, val_t_loss, val_r_loss = evaluate(val_data)
-    if args.rating_reg == 0:
-        val_loss = val_t_loss
-    else:
-        val_loss = val_t_loss + val_r_loss
-    print(now_time() + 'context ppl {:4.4f} | text ppl {:4.4f} | rating loss {:4.4f} | valid loss {:4.4f} on validation'.format(
-        math.exp(val_c_loss), math.exp(val_t_loss), val_r_loss, val_loss))
-    # Save the model if the validation loss is the best we've seen so far.
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        with open(model_path, 'wb') as f:
-            torch.save(model, f)
-    else:
-        endure_count += 1
-        print(now_time() + 'Endured {} time(s)'.format(endure_count))
-        if endure_count == args.endure_times:
-            print(now_time() + 'Cannot endure it anymore | Exiting from early stop')
-            break
-        # Anneal the learning rate if no improvement has been seen in the validation dataset.
-        scheduler.step()
-        print(now_time() + 'Learning rate set to {:2.8f}'.format(scheduler.get_last_lr()[0]))
+if args.mode == 'Train+Test' or args.mode == 'Test':
+    # Load the best saved model.
+    with open(model_path, 'rb') as f:
+        model = torch.load(f).to(device)
 
-# Load the best saved model.
-with open(model_path, 'rb') as f:
-    model = torch.load(f).to(device)
+    # Run on test data.
+    test_c_loss, test_t_loss, test_r_loss = evaluate(test_data)
+    print('=' * 89)
+    print(now_time() + 'context ppl {:4.4f} | text ppl {:4.4f} | rating loss {:4.4f} on test | End of training'.format(
+        math.exp(test_c_loss), math.exp(test_t_loss), test_r_loss))
 
-# Run on test data.
-test_c_loss, test_t_loss, test_r_loss = evaluate(test_data)
-print('=' * 89)
-print(now_time() + 'context ppl {:4.4f} | text ppl {:4.4f} | rating loss {:4.4f} on test | End of training'.format(
-    math.exp(test_c_loss), math.exp(test_t_loss), test_r_loss))
-
-print(now_time() + 'Generating text')
-text_o = generate(test_data)
-with open(prediction_path, 'w', encoding='utf-8') as f:
-    f.write(text_o)
-print(now_time() + 'Generated text saved to ({})'.format(prediction_path))
+    print(now_time() + 'Generating text')
+    text_o = generate(test_data)
+    with open(prediction_path, 'w', encoding='utf-8') as f:
+        f.write(text_o)
+    print(now_time() + 'Generated text saved to ({})'.format(prediction_path))

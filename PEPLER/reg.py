@@ -5,7 +5,7 @@ import argparse
 import torch.nn as nn
 from transformers import GPT2Tokenizer, AdamW
 from module import RecReg
-from Utils.utils import rouge_score, bleu_score, DataLoader, Batchify, now_time, ids2tokens, unique_sentence_percent, \
+from utils import rouge_score, bleu_score, DataLoader, Batchify, now_time, ids2tokens, unique_sentence_percent, \
     root_mean_square_error, mean_absolute_error, feature_detect, feature_matching_ratio, feature_coverage_ratio, feature_diversity
 
 
@@ -20,6 +20,8 @@ parser.add_argument('--epochs', type=int, default=100,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=128,
                     help='batch size')
+parser.add_argument('--seed', type=int, default=1111,
+                    help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--log_interval', type=int, default=200,
@@ -38,6 +40,9 @@ parser.add_argument('--use_mf', action='store_true',
                     help='otherwise MLP')
 parser.add_argument('--words', type=int, default=20,
                     help='number of words to generate for each sample')
+parser.add_argument('--mode', type=str, default='Train+Test',
+                    help='the mode of the NRT, Train for only training, Test for only test, Train+Test for both train and test')
+
 args = parser.parse_args()
 
 if args.data_path is None:
@@ -50,6 +55,7 @@ for arg in vars(args):
     print('{:40} {}'.format(arg, getattr(args, arg)))
 print('-' * 40 + 'ARGUMENTS' + '-' * 40)
 
+torch.manual_seed(args.seed)
 if torch.cuda.is_available():
     if not args.cuda:
         print(now_time() + 'WARNING: You have a CUDA device, so you should probably run with --cuda')
@@ -57,7 +63,7 @@ device = torch.device('cuda' if args.cuda else 'cpu')
 
 if not os.path.exists(args.checkpoint):
     os.makedirs(args.checkpoint)
-model_path = os.path.join(args.checkpoint, 'model.pt')
+model_path = os.path.join(args.checkpoint, 'model_MF.pt' if args.use_mf else 'model_MLP.pt')
 prediction_path = os.path.join(args.checkpoint, args.outf)
 
 ###############################################################################
@@ -190,70 +196,71 @@ def generate(data):
                 break
     return idss_predict, rating_predict
 
-
-# Loop over epochs.
-best_val_loss = float('inf')
-endure_count = 0
-for epoch in range(1, args.epochs + 1):
-    print(now_time() + 'epoch {}'.format(epoch))
-    train(train_data)
-    val_t_loss, val_r_loss = evaluate(val_data)
-    val_loss = val_t_loss + val_r_loss
-    print(now_time() + 'text ppl {:4.4f} | rating loss {:4.4f} | valid loss {:4.4f} on validation'.format(
-        math.exp(val_t_loss), val_r_loss, val_loss))
-    # Save the model if the validation loss is the best we've seen so far.
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        with open(model_path, 'wb') as f:
-            torch.save(model, f)
-    else:
-        endure_count += 1
-        print(now_time() + 'Endured {} time(s)'.format(endure_count))
-        if endure_count == args.endure_times:
-            print(now_time() + 'Cannot endure it anymore | Exiting from early stop')
-            break
-
-# Load the best saved model.
-with open(model_path, 'rb') as f:
-    model = torch.load(f).to(device)
+if args.mode == 'Train+Test' or args.mode == 'Train':
+    # Loop over epochs.
+    best_val_loss = float('inf')
+    endure_count = 0
+    for epoch in range(1, args.epochs + 1):
+        print(now_time() + 'epoch {}'.format(epoch))
+        train(train_data)
+        val_t_loss, val_r_loss = evaluate(val_data)
+        val_loss = val_t_loss + val_r_loss
+        print(now_time() + 'text ppl {:4.4f} | rating loss {:4.4f} | valid loss {:4.4f} on validation'.format(
+            math.exp(val_t_loss), val_r_loss, val_loss))
+        # Save the model if the validation loss is the best we've seen so far.
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            with open(model_path, 'wb') as f:
+                torch.save(model, f)
+        else:
+            endure_count += 1
+            print(now_time() + 'Endured {} time(s)'.format(endure_count))
+            if endure_count == args.endure_times:
+                print(now_time() + 'Cannot endure it anymore | Exiting from early stop')
+                break
 
 
-# Run on test data.
-test_t_loss, test_r_loss = evaluate(test_data)
-print('=' * 89)
-print(now_time() + 'text ppl {:4.4f} | rating loss {:4.4f} on test | End of training'.format(math.exp(test_t_loss), test_r_loss))
-print(now_time() + 'Generating text')
-idss_predicted, rating_predicted = generate(test_data)
-# rating
-predicted_rating = [(r, p) for (r, p) in zip(test_data.rating.tolist(), rating_predicted)]
-RMSE = root_mean_square_error(predicted_rating, corpus.max_rating, corpus.min_rating)
-print(now_time() + 'RMSE {:7.4f}'.format(RMSE))
-MAE = mean_absolute_error(predicted_rating, corpus.max_rating, corpus.min_rating)
-print(now_time() + 'MAE {:7.4f}'.format(MAE))
-# text
-tokens_test = [ids2tokens(ids[1:], tokenizer, eos) for ids in test_data.seq.tolist()]
-tokens_predict = [ids2tokens(ids, tokenizer, eos) for ids in idss_predicted]
-BLEU1 = bleu_score(tokens_test, tokens_predict, n_gram=1, smooth=False)
-print(now_time() + 'BLEU-1 {:7.4f}'.format(BLEU1))
-BLEU4 = bleu_score(tokens_test, tokens_predict, n_gram=4, smooth=False)
-print(now_time() + 'BLEU-4 {:7.4f}'.format(BLEU4))
-USR, USN = unique_sentence_percent(tokens_predict)
-print(now_time() + 'USR {:7.4f} | USN {:7}'.format(USR, USN))
-feature_batch = feature_detect(tokens_predict, feature_set)
-DIV = feature_diversity(feature_batch)  # time-consuming
-print(now_time() + 'DIV {:7.4f}'.format(DIV))
-FCR = feature_coverage_ratio(feature_batch, feature_set)
-print(now_time() + 'FCR {:7.4f}'.format(FCR))
-FMR = feature_matching_ratio(feature_batch, test_data.feature)
-print(now_time() + 'FMR {:7.4f}'.format(FMR))
-text_test = [' '.join(tokens) for tokens in tokens_test]
-text_predict = [' '.join(tokens) for tokens in tokens_predict]
-ROUGE = rouge_score(text_test, text_predict)  # a dictionary
-for (k, v) in ROUGE.items():
-    print(now_time() + '{} {:7.4f}'.format(k, v))
-text_out = ''
-for (real, fake) in zip(text_test, text_predict):
-    text_out += '{}\n{}\n\n'.format(real, fake)
-with open(prediction_path, 'w', encoding='utf-8') as f:
-    f.write(text_out)
-print(now_time() + 'Generated text saved to ({})'.format(prediction_path))
+if args.mode == 'Train+Test' or args.mode == 'Test':
+    # Load the best saved model.
+    with open(model_path, 'rb') as f:
+        model = torch.load(f).to(device)
+
+    # Run on test data.
+    test_t_loss, test_r_loss = evaluate(test_data)
+    print('=' * 89)
+    print(now_time() + 'text ppl {:4.4f} | rating loss {:4.4f} on test | End of training'.format(math.exp(test_t_loss), test_r_loss))
+    print(now_time() + 'Generating text')
+    idss_predicted, rating_predicted = generate(test_data)
+    # rating
+    predicted_rating = [(r, p) for (r, p) in zip(test_data.rating.tolist(), rating_predicted)]
+    RMSE = root_mean_square_error(predicted_rating, corpus.max_rating, corpus.min_rating)
+    print(now_time() + 'RMSE {:7.4f}'.format(RMSE))
+    MAE = mean_absolute_error(predicted_rating, corpus.max_rating, corpus.min_rating)
+    print(now_time() + 'MAE {:7.4f}'.format(MAE))
+    # text
+    tokens_test = [ids2tokens(ids[1:], tokenizer, eos) for ids in test_data.seq.tolist()]
+    tokens_predict = [ids2tokens(ids, tokenizer, eos) for ids in idss_predicted]
+    BLEU1 = bleu_score(tokens_test, tokens_predict, n_gram=1, smooth=False)
+    print(now_time() + 'BLEU-1 {:7.4f}'.format(BLEU1))
+    BLEU4 = bleu_score(tokens_test, tokens_predict, n_gram=4, smooth=False)
+    print(now_time() + 'BLEU-4 {:7.4f}'.format(BLEU4))
+    USR, USN = unique_sentence_percent(tokens_predict)
+    print(now_time() + 'USR {:7.4f} | USN {:7}'.format(USR, USN))
+    feature_batch = feature_detect(tokens_predict, feature_set)
+    DIV = feature_diversity(feature_batch)  # time-consuming
+    print(now_time() + 'DIV {:7.4f}'.format(DIV))
+    FCR = feature_coverage_ratio(feature_batch, feature_set)
+    print(now_time() + 'FCR {:7.4f}'.format(FCR))
+    FMR = feature_matching_ratio(feature_batch, test_data.feature)
+    print(now_time() + 'FMR {:7.4f}'.format(FMR))
+    text_test = [' '.join(tokens) for tokens in tokens_test]
+    text_predict = [' '.join(tokens) for tokens in tokens_predict]
+    ROUGE = rouge_score(text_test, text_predict)  # a dictionary
+    for (k, v) in ROUGE.items():
+        print(now_time() + '{} {:7.4f}'.format(k, v))
+    text_out = ''
+    for (real, fake) in zip(text_test, text_predict):
+        text_out += '{}\n{}\n\n'.format(real, fake)
+    with open(prediction_path, 'w', encoding='utf-8') as f:
+        f.write(text_out)
+    print(now_time() + 'Generated text saved to ({})'.format(prediction_path))

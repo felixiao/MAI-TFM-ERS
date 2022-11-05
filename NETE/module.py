@@ -1,4 +1,4 @@
-from Utils.utils import *
+from utils import *
 import tensorflow as tf
 import numpy as np
 import random
